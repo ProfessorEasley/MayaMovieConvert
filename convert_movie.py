@@ -21,12 +21,12 @@ def popen(cmd, stdout, stderr):
         return subprocess.Popen(cmd, stdout=stdout, stderr=stderr)
 
 def isValidCommand(cmd):
-        try:
-            with open(os.devnull, 'w') as fnull:
-                popen(cmd, stdout=fnull, stderr=fnull)
+    try:
+        with open(os.devnull, 'w') as fnull:
+            popen(cmd, stdout=fnull, stderr=fnull)
             return True
-        except OSError:
-            return False
+    except OSError:
+        return False
 
 def getConfigPath():
     scriptsDir = os.path.dirname(os.path.realpath(__file__))
@@ -97,6 +97,8 @@ def getMovieResolution(ffmpegCommand, inputMoviePath):
                 return int(m.group(1)), int(m.group(2))
 
 def run():
+    global currentMovieSize
+
     if cmds.window('ConvertMovie', exists=True):
         cmds.deleteUI('ConvertMovie', window=True)
 
@@ -109,7 +111,10 @@ def run():
     m = cmds.menu(label='Help', helpMenu=True, parent=w)
     cmds.menuItem(label='Tutorial', parent=m, command=openHelpMenu)
 
-    def resetMovieResolution():
+    currentMovieSize = None
+
+    def resetMovieSize():
+        global currentMovieSize
         inputMoviePath = cmds.textField(inputTextField, q=True, text=True)
         ffmpegCommand = cmds.textField(ffmpegTextField, q=True, text=True)
         if not isValidCommand(ffmpegCommand):
@@ -121,17 +126,21 @@ def run():
             cmds.text(sourceSizeText, edit=True, label='Source Size: {} px x {} px'.format(w, h))
             cmds.textField(widthTextField, edit=True, text=str(w))
             cmds.textField(heightTextField, edit=True, text=str(h))
+            cmds.checkBox(keepProportionsCheckBox, edit=True, enable=True)
+            currentMovieSize = (w, h)
         except Exception as e:
             print('failed to get movie resolution: {}'.format(e))
             cmds.text(sourceSizeText, edit=True, label='Source Size: Unknown')
             cmds.textField(widthTextField, edit=True, text='')
             cmds.textField(heightTextField, edit=True, text='')
+            cmds.checkBox(keepProportionsCheckBox, edit=True, enable=False)
+            currentMovieSize = None
 
     def checkFFMpeg():
         ffmpegCmd = cmds.textField(ffmpegTextField, q=True, text=True)
         if isValidCommand(ffmpegCmd):
             cmds.textField(ffmpegTextField, edit=True, backgroundColor=(0.0, 0.7, 0.0))
-            resetMovieResolution()
+            resetMovieSize()
         else:
             cmds.textField(ffmpegTextField, edit=True, backgroundColor=(0.7, 0.0, 0.0))
             cmds.confirmDialog(
@@ -183,18 +192,15 @@ def run():
             return
         path = os.path.abspath(filename[0])
         cmds.textField(inputTextField, edit=True, text=path)
-        resetMovieResolution()
+        resetMovieSize()
 
     pathsFrame = cmds.frameLayout(label='Paths', parent=l)
 
-    currentSettings = readSettings()
     row = cmds.rowLayout(parent=pathsFrame, numberOfColumns=3, columnWidth3=(90, 190, 50), columnAttach3=('both', 'both', 'both'))
     cmds.text('Input Movie:', parent=row)
     inputTextField = cmds.textField(parent=row, editable=False)
     browseInputButton = cmds.button(label='Browse', parent=row, command=browseInput)
-    if 'inputMovie' in currentSettings:
-        cmds.textField(inputTextField, edit=True, text=currentSettings['inputMovie'])
-    
+
     def browseOutput(*args):
         filename = cmds.fileDialog2(fileMode=3, caption="Select Output Directory")
         if filename is None:
@@ -206,17 +212,36 @@ def run():
     cmds.text('Output Directory:', parent=row)
     outputTextField = cmds.textField(parent=row, editable=False)
     browseOutputButton = cmds.button(label='Browse', parent=row, command=browseOutput)
-    if 'outputDirectory' in currentSettings:
-        cmds.textField(outputTextField, edit=True, text=currentSettings['outputDirectory'])
+
+    def onWidthChanged(*args):
+        try:
+            print(cmds.textField(widthTextField, q=True, text=True))
+            w = int(cmds.textField(widthTextField, q=True, text=True))
+        except ValueError as e:
+            return
+        if currentMovieSize and cmds.checkBox(keepProportionsCheckBox, q=True, value=True):
+            sourceW, sourceH = currentMovieSize
+            h = int(round((float(sourceH)/sourceW)*w))
+            cmds.textField(heightTextField, edit=True, text=str(h))
+
+    def onHeightChanged(*args):
+        try:
+            h = int(cmds.textField(heightTextField, q=True, text=True))
+        except ValueError as e:
+            return
+        if currentMovieSize and cmds.checkBox(keepProportionsCheckBox, q=True, value=True):
+            sourceW, sourceH = currentMovieSize
+            w = int(round((float(sourceW)/sourceH)*h))
+            cmds.textField(widthTextField, edit=True, text=str(w))
 
     imageOptionsFrame = cmds.frameLayout(label='Image Options', collapsable=True, parent=l)
     sourceSizeText = cmds.text('Source Size: Unknown', parent=imageOptionsFrame)
     row = cmds.rowLayout(parent=imageOptionsFrame, numberOfColumns=5, columnWidth5=(50, 50, 50, 50, 120), columnAttach5=('both', 'both', 'both', 'both', 'both'))
     cmds.text('Width:', parent=row)
-    widthTextField = cmds.textField(parent=row)
+    widthTextField = cmds.textField(parent=row, changeCommand=onWidthChanged)
     cmds.text('Height: ', parent=row)
-    heightTextField = cmds.textField(parent=row)
-    cmds.checkBox(value=True, label='Keep Proportions', parent=row)
+    heightTextField = cmds.textField(parent=row, changeCommand=onHeightChanged)
+    keepProportionsCheckBox = cmds.checkBox(value=True, label='Keep Proportions', parent=row, changeCommand=onWidthChanged)
 
     row = cmds.rowLayout(parent=imageOptionsFrame, numberOfColumns=3, columnWidth3=(60, 100, 160), columnAttach3=('both', 'both', 'both'))
     cmds.text('File Name:', parent=row)
@@ -231,11 +256,6 @@ def run():
     imageFileFormatMenu = cmds.optionMenu(label='File Format:', parent=imageOptionsFrame)
     cmds.menuItem(label='PNG')
     cmds.menuItem(label='JPEG')
-    if 'imageFileFormat' in currentSettings:
-        if currentSettings['imageFileFormat'] == 'JPEG':
-            cmds.optionMenu(imageFileFormatMenu, edit=True, select=2)
-        else:
-            cmds.optionMenu(imageFileFormatMenu, edit=True, select=1)
 
     outputLogFrame = cmds.frameLayout(label='Output Log', collapsable=True, parent=l)
     outputLog = cmds.scrollField(editable=False, wordWrap=True, parent=outputLogFrame)
@@ -249,6 +269,11 @@ def run():
         cmds.button(browseFFMpegButton, edit=True, enable=True)
         cmds.button(browseInputButton, edit=True, enable=True)
         cmds.button(browseOutputButton, edit=True, enable=True)
+        cmds.textField(widthTextField, edit=True, enable=True)
+        cmds.textField(heightTextField, edit=True, enable=True)
+        cmds.checkBox(keepProportionsCheckBox, edit=True, enable=True)
+        cmds.textField(imageFileNameTextField, edit=True, enable=True)
+        cmds.optionMenu(numDigitsMenu, edit=True, enable=True)
         cmds.optionMenu(imageFileFormatMenu, edit=True, enable=True)
 
     def endWithSuccess():
@@ -268,8 +293,18 @@ def run():
                 message='The movie conversion failed. Please check the log for more details.',
                 button='OK')
 
-    def convertThread(ffmpegCommand, inputMoviePath, outputImagesDir, imageFormat, cancelEvent):
-        cmd = [ffmpegCommand, '-nostdin', '-y', '-i', inputMoviePath, os.path.join(outputImagesDir, 'frame%d.' + imageFormat)]
+    def convertThread(
+        ffmpegCommand, 
+        inputMoviePath, 
+        outputImagesDir, 
+        customSize,
+        imageFileName,
+        frameNumDigits,
+        imageFormat, 
+        cancelEvent):
+        cmd = [ffmpegCommand, '-nostdin', '-y', '-i', inputMoviePath] \
+            + (['-s', str(customSize[0]) + 'x' + str(customSize[1])] if customSize else []) \
+            + [os.path.join(outputImagesDir, '{}.%{}d.{}'.format(imageFileName, frameNumDigits, imageFormat))]
         outputFilePath = getOutputLogPath()
         with open(outputFilePath, 'w') as outputFd:
             p = popen(cmd, stdout=outputFd, stderr=outputFd)
@@ -291,6 +326,18 @@ def run():
                         break
                 time.sleep(0.1)
 
+    def parseCustomSize():
+        widthValue = cmds.textField(widthTextField, q=True, text=True).strip()
+        heightValue = cmds.textField(heightTextField, q=True, text=True).strip()
+        if len(widthValue) == 0 or len(heightValue) == 0:
+            return None
+        try:
+            w = int(widthValue)
+            h = int(heightValue)
+        except ValueError:
+            return False
+        return w, h
+
     def convertMovie(*args):
         global cancelSignal
         ffmpegCommand = cmds.textField(ffmpegTextField, q=True, text=True)
@@ -303,9 +350,16 @@ def run():
         settings = readSettings()
         inputMoviePath = cmds.textField(inputTextField, q=True, text=True)
         outputImagesDir = cmds.textField(outputTextField, q=True, text=True)
+        customSize = parseCustomSize()
+        imageFileName = cmds.textField(imageFileNameTextField, q=True, text=True).strip()
+        frameNumDigits = cmds.optionMenu(numDigitsMenu, q=True, select=True)
         imageFileFormat = cmds.optionMenu(imageFileFormatMenu, q=True, select=True)
         settings['inputMovie'] = inputMoviePath
         settings['outputDirectory'] = outputImagesDir
+        settings['customSize'] = customSize
+        settings['keepProportions'] = cmds.checkBox(keepProportionsCheckBox, q=True, value=True)
+        settings['imageFileName'] = imageFileName
+        settings['frameNumDigits'] = frameNumDigits
         settings['imageFileFormat'] = 'PNG' if imageFileFormat == 1 else 'JPEG'
         writeSettings(settings)
         if imageFileFormat == 1:
@@ -336,21 +390,66 @@ def run():
                 message='The file at the given output directory path is not a directory.',
                 button='OK')
             return
+        if customSize is False:
+            cmds.confirmDialog(
+                title='Error: Invalid width/height',
+                message='Invalid width/height given, please correct these fields',
+                button='OK')
+            return
+        if len(imageFileName) == 0:
+            cmds.confirmDialog(
+                title='Error: Missing file name',
+                message='Please specify a file name for the output images.',
+                button='OK')
+            return
         cmds.radioButtonGrp(osRadioGroup, edit=True, enable=False)
         cmds.button(browseFFMpegButton, edit=True, enable=False)
         cmds.button(browseInputButton, edit=True, enable=False)
         cmds.button(browseOutputButton, edit=True, enable=False)
+        cmds.textField(widthTextField, edit=True, enable=False)
+        cmds.textField(heightTextField, edit=True, enable=False)
+        cmds.checkBox(keepProportionsCheckBox, edit=True, enable=False)
+        cmds.textField(imageFileNameTextField, edit=True, enable=False)
+        cmds.optionMenu(numDigitsMenu, edit=True, enable=False)
         cmds.optionMenu(imageFileFormatMenu, edit=True, enable=False)
         cmds.scrollField(outputLog, edit=True, text='')
         def cancel(*args):
             cancelEvent.set()
         cmds.button(convertButton, edit=True, label='Cancel', command=cancel)
         cancelEvent = threading.Event()
-        t = threading.Thread(target=convertThread, args=(ffmpegCommand, inputMoviePath, outputImagesDir, imageFileFormat, cancelEvent))
+        t = threading.Thread(target=convertThread, 
+            args=(ffmpegCommand, inputMoviePath, outputImagesDir, 
+                customSize, imageFileName, frameNumDigits, imageFileFormat, cancelEvent))
         t.start()
 
     convertButton = cmds.button(label='Convert', command=convertMovie, parent=l)
     cmds.text(label='', parent=l)
 
+    currentSettings = readSettings()
+    if 'inputMovie' in currentSettings:
+        cmds.textField(inputTextField, edit=True, text=currentSettings['inputMovie'])
+    if 'outputDirectory' in currentSettings:
+        cmds.textField(outputTextField, edit=True, text=currentSettings['outputDirectory'])
+    if 'imageFileName' in currentSettings:
+        imageFileName = currentSettings['imageFileName']
+        cmds.textField(imageFileNameTextField, edit=True, text=imageFileName)
+    if 'frameNumDigits' in currentSettings:
+        cmds.optionMenu(numDigitsMenu, edit=True, select=currentSettings['frameNumDigits'])
+    if 'imageFileFormat' in currentSettings:
+        if currentSettings['imageFileFormat'] == 'JPEG':
+            cmds.optionMenu(imageFileFormatMenu, edit=True, select=2)
+        else:
+            cmds.optionMenu(imageFileFormatMenu, edit=True, select=1)
+
     cmds.showWindow(w)
     checkFFMpeg()
+
+    # load these after checking FFMpeg since it will reset the width/height
+    if 'customSize' in currentSettings:
+        cs = currentSettings['customSize']
+        if cs:
+            cmds.textField(widthTextField, edit=True, text=str(cs[0]))
+            cmds.textField(heightTextField, edit=True, text=str(cs[1]))
+    if 'keepProportions' in currentSettings:
+        kp = currentSettings['keepProportions']
+        cmds.checkBox(keepProportionsCheckBox, edit=True, value=kp)
