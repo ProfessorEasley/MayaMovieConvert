@@ -105,11 +105,15 @@ def run():
     w = cmds.window('ConvertMovie', width=355, height=400, title='Convert Movie', menuBar=True)
     l = cmds.columnLayout(parent=w, columnAttach=('both', 5), rowSpacing=5, columnWidth=350, width=350)
 
-    def openHelpMenu(*args):
+    def openInstructions(*args):
         cmds.showHelp('https://docs.google.com/document/d/1XVG1hAOgN7OIce_GG3SmsO9xnhpXGswg4ClSeiGN6ao/edit?usp=sharing', absolute=True)
 
+    def openYouTubeTutorial(*args):
+        cmds.showHelp('https://www.youtube.com/watch?v=lt_uyIdjtWA', absolute=True)
+
     m = cmds.menu(label='Help', helpMenu=True, parent=w)
-    cmds.menuItem(label='Tutorial', parent=m, command=openHelpMenu)
+    cmds.menuItem(label='Instructions', parent=m, command=openInstructions)
+    cmds.menuItem(label='YouTube Tutorial', parent=m, command=openYouTubeTutorial)
 
     currentMovieSize = None
 
