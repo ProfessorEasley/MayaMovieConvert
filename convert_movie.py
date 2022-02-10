@@ -204,7 +204,7 @@ def run():
 
     row = cmds.rowLayout(parent=pathsFrame, numberOfColumns=3, columnWidth3=(90, 190, 50), columnAttach3=('both', 'both', 'both'))
     cmds.text('Output Directory:', parent=row)
-    outputTextField = cmds.textField(parent=row)
+    outputTextField = cmds.textField(parent=row, editable=False)
     browseOutputButton = cmds.button(label='Browse', parent=row, command=browseOutput)
     if 'outputDirectory' in currentSettings:
         cmds.textField(outputTextField, edit=True, text=currentSettings['outputDirectory'])
@@ -247,8 +247,6 @@ def run():
         cmds.button(convertButton, edit=True, label='Convert', command=convertMovie, parent=l)
         cmds.radioButtonGrp(osRadioGroup, edit=True, enable=True)
         cmds.button(browseFFMpegButton, edit=True, enable=True)
-        cmds.textField(inputTextField, edit=True, enable=True)
-        cmds.textField(outputTextField, edit=True, enable=True)
         cmds.button(browseInputButton, edit=True, enable=True)
         cmds.button(browseOutputButton, edit=True, enable=True)
         cmds.optionMenu(imageFileFormatMenu, edit=True, enable=True)
@@ -340,8 +338,6 @@ def run():
             return
         cmds.radioButtonGrp(osRadioGroup, edit=True, enable=False)
         cmds.button(browseFFMpegButton, edit=True, enable=False)
-        cmds.textField(inputTextField, edit=True, enable=False)
-        cmds.textField(outputTextField, edit=True, enable=False)
         cmds.button(browseInputButton, edit=True, enable=False)
         cmds.button(browseOutputButton, edit=True, enable=False)
         cmds.optionMenu(imageFileFormatMenu, edit=True, enable=False)
