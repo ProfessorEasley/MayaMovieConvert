@@ -4,6 +4,13 @@ Common functions and utilities
 
 2022 Sasha Volokh
 
+Install the script into your Maya script directory, then from within Maya
+use the following to run it:
+
+import convert_movie
+reload(convert_movie)
+convert_movie.run()
+
 '''
 
 import maya.cmds as cmds
@@ -14,6 +21,11 @@ import threading
 import subprocess
 import json
 import re
+from collections import namedtuple
+
+FileFormat = namedtuple('FileFormat', ['name', 'extension', 'is_movie'])
+
+FILE_FORMATS = [FileFormat('PNG', 'png', False), FileFormat('JPEG', 'jpg', False), FileFormat('MP4', 'mp4', True), FileFormat('AVI', 'avi', True)]
 
 def popen(cmd, stdout, stderr):
     if cmds.about(windows=True):
@@ -240,18 +252,18 @@ def run():
             w = int(round((float(sourceW)/sourceH)*h))
             cmds.textField(widthTextField, edit=True, text=str(w))
 
-    imageOptionsFrame = cmds.frameLayout(label='Image Options', collapsable=True, parent=l)
-    sourceSizeText = cmds.text('Source Size: Unknown', parent=imageOptionsFrame)
-    row = cmds.rowLayout(parent=imageOptionsFrame, numberOfColumns=5, columnWidth5=(50, 50, 50, 50, 120), columnAttach5=('both', 'both', 'both', 'both', 'both'))
+    outputOptionsFrame = cmds.frameLayout(label='Output Options', collapsable=True, parent=l)
+    sourceSizeText = cmds.text('Source Size: Unknown', parent=outputOptionsFrame)
+    row = cmds.rowLayout(parent=outputOptionsFrame, numberOfColumns=5, columnWidth5=(50, 50, 50, 50, 120), columnAttach5=('both', 'both', 'both', 'both', 'both'))
     cmds.text('Width:', parent=row)
     widthTextField = cmds.textField(parent=row, changeCommand=onWidthChanged)
     cmds.text('Height: ', parent=row)
     heightTextField = cmds.textField(parent=row, changeCommand=onHeightChanged)
     keepProportionsCheckBox = cmds.checkBox(value=True, label='Keep Proportions', parent=row, changeCommand=onWidthChanged)
 
-    row = cmds.rowLayout(parent=imageOptionsFrame, numberOfColumns=3, columnWidth3=(60, 100, 160), columnAttach3=('both', 'both', 'both'))
+    row = cmds.rowLayout(parent=outputOptionsFrame, numberOfColumns=3, columnWidth3=(60, 100, 160), columnAttach3=('both', 'both', 'both'))
     cmds.text('File Name:', parent=row)
-    imageFileNameTextField = cmds.textField(parent=row, text='frame')
+    outputFileNameTextField = cmds.textField(parent=row, text='frame')
     numDigitsMenu = cmds.optionMenu(label='  Frame Digits: ', parent=row)
     cmds.menuItem(label='1')
     cmds.menuItem(label='2')
@@ -259,9 +271,13 @@ def run():
     cmds.menuItem(label='4')
     cmds.optionMenu(numDigitsMenu, edit=True, select=4)
 
-    imageFileFormatMenu = cmds.optionMenu(label='File Format:', parent=imageOptionsFrame)
-    cmds.menuItem(label='PNG')
-    cmds.menuItem(label='JPEG')
+    def updateUIForFileFormat(*args):
+        fmt = FILE_FORMATS[cmds.optionMenu(fileFormatMenu, q=True, select=True)-1]
+        cmds.optionMenu(numDigitsMenu, edit=True, enable=not fmt.is_movie)
+
+    fileFormatMenu = cmds.optionMenu(label='File Format:', parent=outputOptionsFrame, changeCommand=updateUIForFileFormat)
+    for option in FILE_FORMATS:
+        cmds.menuItem(label=option.name)
 
     outputLogFrame = cmds.frameLayout(label='Output Log', collapsable=True, parent=l)
     outputLog = cmds.scrollField(editable=False, wordWrap=True, parent=outputLogFrame)
@@ -278,9 +294,10 @@ def run():
         cmds.textField(widthTextField, edit=True, enable=True)
         cmds.textField(heightTextField, edit=True, enable=True)
         cmds.checkBox(keepProportionsCheckBox, edit=True, enable=True)
-        cmds.textField(imageFileNameTextField, edit=True, enable=True)
+        cmds.textField(outputFileNameTextField, edit=True, enable=True)
         cmds.optionMenu(numDigitsMenu, edit=True, enable=True)
-        cmds.optionMenu(imageFileFormatMenu, edit=True, enable=True)
+        cmds.optionMenu(fileFormatMenu, edit=True, enable=True)
+        updateUIForFileFormat()
 
     def endWithSuccess():
         resetUIEnabled()
@@ -299,18 +316,17 @@ def run():
                 message='The movie conversion failed. Please check the log for more details.',
                 button='OK')
 
-    def convertThread(
-        ffmpegCommand, 
-        inputMoviePath, 
-        outputImagesDir, 
-        customSize,
-        imageFileName,
-        frameNumDigits,
-        imageFormat, 
-        cancelEvent):
-        cmd = [ffmpegCommand, '-nostdin', '-y', '-i', inputMoviePath] \
-            + (['-s', str(customSize[0]) + 'x' + str(customSize[1])] if customSize else []) \
-            + [os.path.join(outputImagesDir, '{}.%{}d.{}'.format(imageFileName, frameNumDigits, imageFormat))]
+    def convertThread(ffmpegCommand, inputMoviePath, outputDir, customSize, outputFileName, frameNumDigits, fileExtension, cancelEvent):
+        cmd = [ffmpegCommand, '-nostdin', '-y', '-i', inputMoviePath]
+        if customSize:
+            cmd += ['-s', str(customSize[0]) + 'x' + str(customSize[1])]
+        if fileExtension == 'mp4':
+            cmd += ['-c:v', 'libx264', '-c:a', 'aac', '-vf', 'format=yuv420p', '-movflags', '+faststart',
+             os.path.join(outputDir, '{}.mp4'.format(outputFileName))]
+        elif fileExtension == 'avi':
+            cmd += ['-c:v', 'rawvideo', '-pix_fmt', 'yuv420p', os.path.join(outputDir, '{}.avi'.format(outputFileName))]
+        else:
+            cmd += [os.path.join(outputDir, '{}.%{}d.{}'.format(outputFileName, frameNumDigits, fileExtension))]
         outputFilePath = getOutputLogPath()
         with open(outputFilePath, 'w') as outputFd:
             p = popen(cmd, stdout=outputFd, stderr=outputFd)
@@ -355,24 +371,21 @@ def run():
             return
         settings = readSettings()
         inputMoviePath = cmds.textField(inputTextField, q=True, text=True)
-        outputImagesDir = cmds.textField(outputTextField, q=True, text=True)
+        outputDir = cmds.textField(outputTextField, q=True, text=True)
         customSize = parseCustomSize()
-        imageFileName = cmds.textField(imageFileNameTextField, q=True, text=True).strip()
+        outputFileName = cmds.textField(outputFileNameTextField, q=True, text=True).strip()
         frameNumDigits = cmds.optionMenu(numDigitsMenu, q=True, select=True)
-        imageFileFormat = cmds.optionMenu(imageFileFormatMenu, q=True, select=True)
+        fileFormat = cmds.optionMenu(fileFormatMenu, q=True, select=True)
         settings['inputMovie'] = inputMoviePath
-        settings['outputDirectory'] = outputImagesDir
+        settings['outputDirectory'] = outputDir
         settings['customSize'] = customSize
         settings['keepProportions'] = cmds.checkBox(keepProportionsCheckBox, q=True, value=True)
-        settings['imageFileName'] = imageFileName
+        settings['outputFileName'] = outputFileName
         settings['frameNumDigits'] = frameNumDigits
-        settings['imageFileFormat'] = 'PNG' if imageFileFormat == 1 else 'JPEG'
+        settings['fileFormat'] = FILE_FORMATS[fileFormat-1].name
         writeSettings(settings)
-        if imageFileFormat == 1:
-            imageFileFormat = 'png'
-        else:
-            imageFileFormat = 'jpg'
-        if len(inputMoviePath) == 0 or len(outputImagesDir) == 0:
+        fileFormat = FILE_FORMATS[fileFormat-1].extension
+        if len(inputMoviePath) == 0 or len(outputDir) == 0:
             cmds.confirmDialog(
                 title='Error: Missing input/output', 
                 message='Please specify both the input movie path and the output directory path.',
@@ -384,13 +397,13 @@ def run():
                 message='The given input movie path does not exist.',
                 button='OK')
             return
-        if not os.path.exists(outputImagesDir):
+        if not os.path.exists(outputDir):
             cmds.confirmDialog(
                 title='Error: Invalid output directory path', 
                 message='The given output directory path does not exist.',
                 button='OK')
             return
-        if not os.path.isdir(outputImagesDir):
+        if not os.path.isdir(outputDir):
             cmds.confirmDialog(
                 title='Error: Invalid output directory path', 
                 message='The file at the given output directory path is not a directory.',
@@ -402,7 +415,7 @@ def run():
                 message='Invalid width/height given, please correct these fields',
                 button='OK')
             return
-        if len(imageFileName) == 0:
+        if len(outputFileName) == 0:
             cmds.confirmDialog(
                 title='Error: Missing file name',
                 message='Please specify a file name for the output images.',
@@ -415,17 +428,17 @@ def run():
         cmds.textField(widthTextField, edit=True, enable=False)
         cmds.textField(heightTextField, edit=True, enable=False)
         cmds.checkBox(keepProportionsCheckBox, edit=True, enable=False)
-        cmds.textField(imageFileNameTextField, edit=True, enable=False)
+        cmds.textField(outputFileNameTextField, edit=True, enable=False)
         cmds.optionMenu(numDigitsMenu, edit=True, enable=False)
-        cmds.optionMenu(imageFileFormatMenu, edit=True, enable=False)
+        cmds.optionMenu(fileFormatMenu, edit=True, enable=False)
         cmds.scrollField(outputLog, edit=True, text='')
         def cancel(*args):
             cancelEvent.set()
         cmds.button(convertButton, edit=True, label='Cancel', command=cancel)
         cancelEvent = threading.Event()
         t = threading.Thread(target=convertThread, 
-            args=(ffmpegCommand, inputMoviePath, outputImagesDir, 
-                customSize, imageFileName, frameNumDigits, imageFileFormat, cancelEvent))
+            args=(ffmpegCommand, inputMoviePath, outputDir, 
+                customSize, outputFileName, frameNumDigits, fileFormat, cancelEvent))
         t.start()
 
     convertButton = cmds.button(label='Convert', command=convertMovie, parent=l)
@@ -436,16 +449,17 @@ def run():
         cmds.textField(inputTextField, edit=True, text=currentSettings['inputMovie'])
     if 'outputDirectory' in currentSettings:
         cmds.textField(outputTextField, edit=True, text=currentSettings['outputDirectory'])
-    if 'imageFileName' in currentSettings:
-        imageFileName = currentSettings['imageFileName']
-        cmds.textField(imageFileNameTextField, edit=True, text=imageFileName)
+    if 'outputFileName' in currentSettings:
+        outputFileName = currentSettings['outputFileName']
+        cmds.textField(outputFileNameTextField, edit=True, text=outputFileName)
     if 'frameNumDigits' in currentSettings:
         cmds.optionMenu(numDigitsMenu, edit=True, select=currentSettings['frameNumDigits'])
-    if 'imageFileFormat' in currentSettings:
-        if currentSettings['imageFileFormat'] == 'JPEG':
-            cmds.optionMenu(imageFileFormatMenu, edit=True, select=2)
-        else:
-            cmds.optionMenu(imageFileFormatMenu, edit=True, select=1)
+    if 'fileFormat' in currentSettings:
+        try:
+            index = list(map(lambda opt: opt.name, FILE_FORMATS)).index(currentSettings['fileFormat'])+1
+            cmds.optionMenu(fileFormatMenu, edit=True, select=index)
+        except ValueError:
+            pass
 
     cmds.showWindow(w)
     checkFFMpeg()
