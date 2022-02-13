@@ -105,7 +105,7 @@ def getMovieResolution(ffmpegCommand, inputMoviePath):
             if len(line) == 0:
                 raise Exception('could not determine movie resolution')
             if line.find('Video:') > 0:
-                m = re.search('(\\d+)x(\\d+)', line.replace(' 0x', ''))
+                m = re.search('(\\d+)x(\\d+)', re.sub('[^0-9]0x', '', line))
                 if not m:
                     raise Exception('failed to determine movie resolution from ffmpeg output')
                 return int(m.group(1)), int(m.group(2))
