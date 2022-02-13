@@ -141,13 +141,13 @@ def run():
 
     currentMovieSize = None
 
-    def resetMovieSize():
+    def resetMovieSize(*args):
         global currentMovieSize
         inputMoviePath = cmds.textField(inputTextField, q=True, text=True)
         ffmpegCommand = cmds.textField(ffmpegTextField, q=True, text=True)
         if not isValidCommand(ffmpegCommand):
             return
-        if len(inputMoviePath) == 0:
+        if len(inputMoviePath) == 0 or not os.path.exists(inputMoviePath):
             return
         try:
             w, h = getMovieResolution(ffmpegCommand, inputMoviePath)
@@ -212,7 +212,7 @@ def run():
         select=1 if getDefaultOperatingSystem() == 'PC' else 2, 
         onCommand1=onSelect('PC'), onCommand2=onSelect('MAC'), columnAlign=(1, 'left'), columnWidth3=(100, 80, 80))
     row = cmds.rowLayout(parent=ffmpegFrame, numberOfColumns=2, columnWidth2=(290, 50), columnAttach2=('both', 'both'))
-    ffmpegTextField = cmds.textField(parent=row, editable=False, text=getDefaultFFMpeg(getSelectedOperatingSystem()))
+    ffmpegTextField = cmds.textField(parent=row, text=getDefaultFFMpeg(getSelectedOperatingSystem()), editable=False)
     browseFFMpegButton = cmds.button(label='Browse', parent=row, command=browseFFMpeg)
 
     def browseInput(*args):
@@ -228,7 +228,7 @@ def run():
 
     row = cmds.rowLayout(parent=pathsFrame, numberOfColumns=3, columnWidth3=(90, 190, 50), columnAttach3=('both', 'both', 'both'))
     cmds.text('Input Movie:', parent=row)
-    inputTextField = cmds.textField(parent=row, editable=False)
+    inputTextField = cmds.textField(parent=row, changeCommand=resetMovieSize)
     browseInputButton = cmds.button(label='Browse', parent=row, command=browseInput)
 
     def browseOutput(*args):
@@ -241,7 +241,7 @@ def run():
 
     row = cmds.rowLayout(parent=pathsFrame, numberOfColumns=3, columnWidth3=(90, 190, 50), columnAttach3=('both', 'both', 'both'))
     cmds.text('Output Directory:', parent=row)
-    outputTextField = cmds.textField(parent=row, editable=False)
+    outputTextField = cmds.textField(parent=row)
     browseOutputButton = cmds.button(label='Browse', parent=row, command=browseOutput)
 
     def onWidthChanged(*args):
@@ -304,6 +304,8 @@ def run():
         cmds.button(browseFFMpegButton, edit=True, enable=True)
         cmds.button(browseInputButton, edit=True, enable=True)
         cmds.button(browseOutputButton, edit=True, enable=True)
+        cmds.textField(inputTextField, edit=True, enable=True)
+        cmds.textField(outputTextField, edit=True, enable=True)
         cmds.textField(widthTextField, edit=True, enable=True)
         cmds.textField(heightTextField, edit=True, enable=True)
         cmds.checkBox(keepProportionsCheckBox, edit=True, enable=True)
@@ -438,6 +440,8 @@ def run():
         cmds.button(browseFFMpegButton, edit=True, enable=False)
         cmds.button(browseInputButton, edit=True, enable=False)
         cmds.button(browseOutputButton, edit=True, enable=False)
+        cmds.textField(inputTextField, edit=True, enable=False)
+        cmds.textField(outputTextField, edit=True, enable=False)
         cmds.textField(widthTextField, edit=True, enable=False)
         cmds.textField(heightTextField, edit=True, enable=False)
         cmds.checkBox(keepProportionsCheckBox, edit=True, enable=False)
