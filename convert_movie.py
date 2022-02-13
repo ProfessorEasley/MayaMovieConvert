@@ -110,6 +110,16 @@ def getMovieResolution(ffmpegCommand, inputMoviePath):
                     raise Exception('failed to determine movie resolution from ffmpeg output')
                 return int(m.group(1)), int(m.group(2))
 
+def fileDialogStartDir(currentText, isDir=False):
+    if os.path.exists(currentText):
+        absPath = os.path.abspath(currentText)
+        if isDir:
+            return {'startingDirectory': absPath}
+        else:
+            return {'startingDirectory': os.path.split(absPath)[0]}
+    else:
+        return dict()
+
 def run():
     global currentMovieSize
 
@@ -167,7 +177,8 @@ def run():
                     button='OK')
 
     def browseFFMpeg(*args):
-        filename = cmds.fileDialog2(fileMode=1, fileFilter='*', caption="Select FFMpeg executable")
+        currentText = cmds.textField(ffmpegTextField, q=True, text=True)
+        filename = cmds.fileDialog2(fileMode=1, fileFilter='*', caption="Select FFMpeg executable", **fileDialogStartDir(currentText))
         if filename is None:
             return
         path = os.path.abspath(filename[0])
@@ -205,7 +216,8 @@ def run():
     browseFFMpegButton = cmds.button(label='Browse', parent=row, command=browseFFMpeg)
 
     def browseInput(*args):
-        filename = cmds.fileDialog2(fileMode=1, caption="Select Movie File")
+        currentText = cmds.textField(inputTextField, q=True, text=True)
+        filename = cmds.fileDialog2(fileMode=1, caption="Select Movie File", **fileDialogStartDir(currentText))
         if filename is None:
             return
         path = os.path.abspath(filename[0])
@@ -220,7 +232,8 @@ def run():
     browseInputButton = cmds.button(label='Browse', parent=row, command=browseInput)
 
     def browseOutput(*args):
-        filename = cmds.fileDialog2(fileMode=3, caption="Select Output Directory")
+        currentText = cmds.textField(outputTextField, q=True, text=True)
+        filename = cmds.fileDialog2(fileMode=3, caption="Select Output Directory", **fileDialogStartDir(currentText, isDir=True))
         if filename is None:
             return
         path = os.path.abspath(filename[0])
