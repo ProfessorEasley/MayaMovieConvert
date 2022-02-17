@@ -139,9 +139,16 @@ def run():
     def openYouTubeTutorial(*args):
         cmds.showHelp('https://www.youtube.com/watch?v=lt_uyIdjtWA', absolute=True)
 
+    def openAbout(*args):
+        cmds.confirmDialog(
+            title='About', 
+            message='Convert Movie Script v1.0\nWritten by Sasha Volokh (2022)',
+            button='OK')
+
     m = cmds.menu(label='Help', helpMenu=True, parent=w)
     cmds.menuItem(label='Instructions', parent=m, command=openInstructions)
     cmds.menuItem(label='YouTube Tutorial', parent=m, command=openYouTubeTutorial)
+    cmds.menuItem(label='About', parent=m, command=openAbout)
 
     currentMovieSize = None
 
