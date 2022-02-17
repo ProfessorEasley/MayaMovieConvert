@@ -80,15 +80,19 @@ def getDefaultFFMpeg(operatingSystem):
         defaultCmd = os.path.join(scriptsDir, 'ffmpeg', 'bin', 'ffmpeg.exe')
     else:
         defaultCmd = os.path.join(scriptsDir, 'ffmpeg')
-    if 'ffmpegCommand' in settings and isValidCommand(settings['ffmpegCommand']):
-        return settings['ffmpegCommand']
+    if operatingSystem == 'PC' and 'ffmpegCommandPC' in settings and isValidCommand(settings['ffmpegCommandPC']):
+        return settings['ffmpegCommandPC']
+    elif operatingSystem == 'MAC' and 'ffmpegCommandMAC' in settings and isValidCommand(settings['ffmpegCommandMAC']):
+        return settings['ffmpegCommandMAC']
     elif isValidCommand('ffmpeg'):
         return 'ffmpeg'
     elif isValidCommand(defaultCmd):
         return defaultCmd
     else:
-        if 'ffmpegCommand' in settings:
-            return settings['ffmpegCommand']
+        if operatingSystem == 'PC' and 'ffmpegCommandPC' in settings:
+            return settings['ffmpegCommandPC']
+        elif operatingSystem == 'MAC' and 'ffmpegCommandMAC' in settings:
+            return settings['ffmpegCommandMAC']
         else:
             return defaultCmd
 
@@ -184,7 +188,11 @@ def run():
         path = os.path.abspath(filename[0])
         cmds.textField(ffmpegTextField, edit=True, text=path)
         settings = readSettings()
-        settings['ffmpegCommand'] = path
+        operatingSystem = getSelectedOperatingSystem()
+        if operatingSystem == 'PC':
+            settings['ffmpegCommandPC'] = path
+        else:
+            settings['ffmpegCommandMAC'] = path
         writeSettings(settings)
         checkFFMpeg()
 
@@ -199,8 +207,6 @@ def run():
         def handler(*args):
             settings = readSettings()
             settings['operatingSystem'] = operatingSystem
-            if 'ffmpegCommand' in settings:
-                del settings['ffmpegCommand']
             writeSettings(settings)
             cmds.textField(ffmpegTextField, edit=True, text=getDefaultFFMpeg(operatingSystem))
             checkFFMpeg()
