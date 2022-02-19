@@ -5,10 +5,19 @@ Common functions and utilities
 2022 Sasha Volokh
 
 Install the script into your Maya script directory, then from within Maya
-use the following to run it:
+use the following:
+
+For versions of Maya BEFORE 2022:
 
 import convert_movie
 reload(convert_movie)
+convert_movie.run()
+
+For versions of Maya 2022 or higher:
+
+import convert_movie
+import importlib
+importlib.reload(convert_movie)
 convert_movie.run()
 
 '''
