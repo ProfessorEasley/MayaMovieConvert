@@ -106,12 +106,11 @@ def getDefaultFFMpeg(operatingSystem):
             return defaultCmd
 
 def getMovieResolution(ffmpegCommand, inputMoviePath):
-    cmd = [ffmpegCommand, '-nostdin', '-y', '-i', inputMoviePath, '-f', 'null', '-']
+    cmd = [ffmpegCommand, '-nostdin', '-y', '-i', inputMoviePath]
     outputFilePath = getOutputLogPath()
     with open(outputFilePath, 'w') as outputFd:
         p = popen(cmd, outputFd, outputFd)
-        if p.wait() != 0:
-            raise Exception('ffmpeg command failed for determining resolution')
+        p.wait()
     with open(outputFilePath, 'r') as fd:
         while True:
             line = fd.readline()
@@ -151,7 +150,7 @@ def run():
     def openAbout(*args):
         cmds.confirmDialog(
             title='About', 
-            message='Convert Movie Script v1.0\nWritten by Sasha Volokh (2022)',
+            message='Convert Movie Script v1.1\nWritten by Sasha Volokh (2022)',
             button='OK')
 
     m = cmds.menu(label='Help', helpMenu=True, parent=w)
