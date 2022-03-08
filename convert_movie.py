@@ -317,7 +317,9 @@ def run():
     outputLog = cmds.scrollField(editable=False, wordWrap=True, parent=outputLogFrame)
 
     def appendToLog(msg):
-        cmds.scrollField(outputLog, edit=True, insertText=msg, insertionPosition=0)
+        def fn():
+            cmds.scrollField(outputLog, edit=True, insertText=msg, insertionPosition=0)
+        maya.utils.executeInMainThreadWithResult(fn)
 
     def resetUIEnabled():
         cmds.button(convertButton, edit=True, label='Convert', command=convertMovie, parent=l)
@@ -363,6 +365,7 @@ def run():
             cmd += ['-c:v', 'rawvideo', '-pix_fmt', 'yuv420p', os.path.join(outputDir, '{}.avi'.format(outputFileName))]
         else:
             cmd += [os.path.join(outputDir, '{}.%{}d.{}'.format(outputFileName, frameNumDigits, fileExtension))]
+        appendToLog('Running command: ' + str(cmd) + '\n')
         outputFilePath = getOutputLogPath()
         with open(outputFilePath, 'w') as outputFd:
             p = popen(cmd, stdout=outputFd, stderr=outputFd)
