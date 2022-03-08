@@ -267,13 +267,15 @@ def run():
 
     def onWidthChanged(*args):
         try:
-            print(cmds.textField(widthTextField, q=True, text=True))
             w = int(cmds.textField(widthTextField, q=True, text=True))
         except ValueError as e:
             return
+        if w % 2 != 0:
+            w = int(round(w/2.0))*2
+            cmds.textField(widthTextField, edit=True, text=str(w))
         if currentMovieSize and cmds.checkBox(keepProportionsCheckBox, q=True, value=True):
             sourceW, sourceH = currentMovieSize
-            h = int(round((float(sourceH)/sourceW)*w))
+            h = int(round((float(sourceH)/sourceW)*w/2.0))*2
             cmds.textField(heightTextField, edit=True, text=str(h))
 
     def onHeightChanged(*args):
@@ -281,9 +283,12 @@ def run():
             h = int(cmds.textField(heightTextField, q=True, text=True))
         except ValueError as e:
             return
+        if h % 2 != 0:
+            h = int(round(h/2.0))*2
+            cmds.textField(heightTextField, edit=True, text=str(h))
         if currentMovieSize and cmds.checkBox(keepProportionsCheckBox, q=True, value=True):
             sourceW, sourceH = currentMovieSize
-            w = int(round((float(sourceW)/sourceH)*h))
+            w = int(round((float(sourceW)/sourceH)*h/2.0))*2
             cmds.textField(widthTextField, edit=True, text=str(w))
 
     outputOptionsFrame = cmds.frameLayout(label='Output Options', collapsable=True, parent=l)
