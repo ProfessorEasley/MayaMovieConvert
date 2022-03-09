@@ -34,6 +34,7 @@ from collections import namedtuple
 
 FileFormat = namedtuple('FileFormat', ['name', 'extension', 'is_movie'])
 
+VERSION = '1.2'
 FILE_FORMATS = [FileFormat('PNG', 'png', False), FileFormat('JPEG', 'jpg', False), FileFormat('MP4', 'mp4', True), FileFormat('AVI', 'avi', True)]
 
 def popen(cmd, stdout, stderr):
@@ -138,8 +139,8 @@ def run():
     if cmds.window('ConvertMovie', exists=True):
         cmds.deleteUI('ConvertMovie', window=True)
 
-    w = cmds.window('ConvertMovie', width=355, height=400, title='Convert Movie', menuBar=True)
-    l = cmds.columnLayout(parent=w, columnAttach=('both', 5), rowSpacing=5, columnWidth=350, width=350)
+    w = cmds.window('ConvertMovie', width=355, height=400, title='Convert Movie v{}'.format(VERSION), menuBar=True)
+    l = cmds.columnLayout(parent=w, columnAttach=('both', 5), rowSpacing=5, adjustableColumn=True)
 
     def openInstructions(*args):
         cmds.showHelp('https://docs.google.com/document/d/1XVG1hAOgN7OIce_GG3SmsO9xnhpXGswg4ClSeiGN6ao/edit?usp=sharing', absolute=True)
@@ -150,7 +151,7 @@ def run():
     def openAbout(*args):
         cmds.confirmDialog(
             title='About', 
-            message='Convert Movie Script v1.1\nWritten by Sasha Volokh (2022)',
+            message='Convert Movie Script v{}\nWritten by Sasha Volokh (2022)'.format(VERSION),
             button='OK')
 
     m = cmds.menu(label='Help', helpMenu=True, parent=w)
@@ -232,7 +233,7 @@ def run():
     osRadioGroup = cmds.radioButtonGrp(parent=ffmpegFrame, numberOfRadioButtons=2, label='    OS:           ', labelArray2=('PC', 'MAC'), 
         select=1 if getDefaultOperatingSystem() == 'PC' else 2, 
         onCommand1=onSelect('PC'), onCommand2=onSelect('MAC'), columnAlign=(1, 'left'), columnWidth3=(100, 80, 80))
-    row = cmds.rowLayout(parent=ffmpegFrame, numberOfColumns=2, columnWidth2=(290, 50), columnAttach2=('both', 'both'))
+    row = cmds.rowLayout(parent=ffmpegFrame, numberOfColumns=2, columnWidth2=(290, 50), columnAttach2=('both', 'both'), adjustableColumn=1)
     ffmpegTextField = cmds.textField(parent=row, text=getDefaultFFMpeg(getSelectedOperatingSystem()), editable=False)
     browseFFMpegButton = cmds.button(label='Browse', parent=row, command=browseFFMpeg)
 
@@ -247,7 +248,7 @@ def run():
 
     pathsFrame = cmds.frameLayout(label='Paths', parent=l)
 
-    row = cmds.rowLayout(parent=pathsFrame, numberOfColumns=3, columnWidth3=(90, 190, 50), columnAttach3=('both', 'both', 'both'))
+    row = cmds.rowLayout(parent=pathsFrame, numberOfColumns=3, columnWidth3=(90, 190, 50), columnAttach3=('both', 'both', 'both'), adjustableColumn=2)
     cmds.text('Input Movie:', parent=row)
     inputTextField = cmds.textField(parent=row, changeCommand=resetMovieSize)
     browseInputButton = cmds.button(label='Browse', parent=row, command=browseInput)
@@ -260,7 +261,7 @@ def run():
         path = os.path.abspath(filename[0])
         cmds.textField(outputTextField, edit=True, text=path)
 
-    row = cmds.rowLayout(parent=pathsFrame, numberOfColumns=3, columnWidth3=(90, 190, 50), columnAttach3=('both', 'both', 'both'))
+    row = cmds.rowLayout(parent=pathsFrame, numberOfColumns=3, columnWidth3=(90, 190, 50), columnAttach3=('both', 'both', 'both'), adjustableColumn=2)
     cmds.text('Output Directory:', parent=row)
     outputTextField = cmds.textField(parent=row)
     browseOutputButton = cmds.button(label='Browse', parent=row, command=browseOutput)
@@ -300,7 +301,7 @@ def run():
     heightTextField = cmds.textField(parent=row, changeCommand=onHeightChanged)
     keepProportionsCheckBox = cmds.checkBox(value=True, label='Keep Proportions', parent=row, changeCommand=onWidthChanged)
 
-    row = cmds.rowLayout(parent=outputOptionsFrame, numberOfColumns=3, columnWidth3=(60, 100, 160), columnAttach3=('both', 'both', 'both'))
+    row = cmds.rowLayout(parent=outputOptionsFrame, numberOfColumns=3, columnWidth3=(60, 100, 160), columnAttach3=('both', 'both', 'both'), adjustableColumn=2)
     cmds.text('File Name:', parent=row)
     outputFileNameTextField = cmds.textField(parent=row, text='frame')
     numDigitsMenu = cmds.optionMenu(label='  Frame Digits: ', parent=row)
@@ -320,6 +321,18 @@ def run():
 
     outputLogFrame = cmds.frameLayout(label='Output Log', collapsable=True, parent=l)
     outputLog = cmds.scrollField(editable=False, wordWrap=True, parent=outputLogFrame)
+
+    def outputLogSaveAs(*args):
+        log = cmds.scrollField(outputLog, q=True, text=True)
+        path = cmds.fileDialog2(fileMode=0, caption="Save Output Log As..", fileFilter="*.log")
+        if not path or len(path) < 1:
+            return
+        path = path[0]
+        with open(path, 'w') as f:
+            f.write(log)
+
+    cmds.popupMenu(parent=outputLogFrame, button=3)
+    cmds.menuItem(label='Save As...', command=outputLogSaveAs)
 
     def appendToLog(msg):
         def fn():
@@ -346,7 +359,7 @@ def run():
         resetUIEnabled()
         cmds.confirmDialog(
                 title='Conversion successful', 
-                message='The input movie has been successfully converted into the image sequence.',
+                message='The input movie has been successfully converted.',
                 button='OK')
 
     def endWithCancel():
