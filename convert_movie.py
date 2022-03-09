@@ -107,21 +107,23 @@ def getDefaultFFMpeg(operatingSystem):
             return defaultCmd
 
 def getMovieResolution(ffmpegCommand, inputMoviePath):
-    cmd = [ffmpegCommand, '-nostdin', '-y', '-i', inputMoviePath]
+    cmd = [ffmpegCommand, '-nostdin', '-y', '-ss', '00:00:00', '-to', '00:00:01', '-i', inputMoviePath, '-f', 'null', '-']
     outputFilePath = getOutputLogPath()
     with open(outputFilePath, 'w') as outputFd:
         p = popen(cmd, outputFd, outputFd)
-        p.wait()
+        res = p.wait()
+        if res != 0:
+            raise Exception('failed to start ffmpeg to determine movie resolution')
     with open(outputFilePath, 'r') as fd:
-        while True:
-            line = fd.readline()
-            if len(line) == 0:
-                raise Exception('could not determine movie resolution')
+        lines = fd.read().split('\n')
+        for i in range(len(lines) - 1, 0, -1):
+            line = lines[i]
             if line.find('Video:') > 0:
                 m = re.search('(\\d+)x(\\d+)', re.sub('[^0-9]0x', '', line))
                 if not m:
-                    raise Exception('failed to determine movie resolution from ffmpeg output')
+                    continue
                 return int(m.group(1)), int(m.group(2))
+        raise Exception('could not determine movie resolution')
 
 def fileDialogStartDir(currentText, isDir=False):
     if os.path.exists(currentText):
