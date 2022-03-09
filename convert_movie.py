@@ -122,7 +122,12 @@ def getMovieResolution(ffmpegCommand, inputMoviePath):
                 m = re.search('(\\d+)x(\\d+)', re.sub('[^0-9]0x', '', line))
                 if not m:
                     continue
-                return int(m.group(1)), int(m.group(2))
+                w, h = int(m.group(1)), int(m.group(2))
+                if w % 2 != 0:
+                    w = int(round(w/2.0))*2
+                if h % 2 != 0:
+                    h = int(round(h/2.0))*2
+                return w, h 
         raise Exception('could not determine movie resolution')
 
 def fileDialogStartDir(currentText, isDir=False):
