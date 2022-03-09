@@ -140,7 +140,7 @@ def run():
         cmds.deleteUI('ConvertMovie', window=True)
 
     w = cmds.window('ConvertMovie', width=355, height=400, title='Convert Movie v{}'.format(VERSION), menuBar=True)
-    l = cmds.columnLayout(parent=w, columnAttach=('both', 5), rowSpacing=5, adjustableColumn=True)
+    l = cmds.formLayout(parent=w, numberOfDivisions=100)
 
     def openInstructions(*args):
         cmds.showHelp('https://docs.google.com/document/d/1XVG1hAOgN7OIce_GG3SmsO9xnhpXGswg4ClSeiGN6ao/edit?usp=sharing', absolute=True)
@@ -517,8 +517,34 @@ def run():
         try:
             index = list(map(lambda opt: opt.name, FILE_FORMATS)).index(currentSettings['fileFormat'])+1
             cmds.optionMenu(fileFormatMenu, edit=True, select=index)
+            updateUIForFileFormat()
         except ValueError:
             pass
+
+    cmds.formLayout(l, edit=True, 
+        attachForm=[
+            (ffmpegFrame, 'top', 5), 
+            (ffmpegFrame, 'left', 5),
+            (ffmpegFrame, 'right', 5),
+            (pathsFrame, 'left', 5),
+            (pathsFrame, 'right', 5),
+            (outputOptionsFrame, 'left', 5),
+            (outputOptionsFrame, 'right', 5),
+            (outputLogFrame, 'left', 5),
+            (outputLogFrame, 'right', 5),
+            (convertButton, 'bottom', 5),
+            (convertButton, 'left', 5),
+            (convertButton, 'right', 5)
+        ],
+        attachControl=[
+            (pathsFrame, 'top', 5, ffmpegFrame),
+            (outputOptionsFrame, 'top', 5, pathsFrame),
+            (outputLogFrame, 'top', 5, outputOptionsFrame)
+        ],
+        attachPosition=[
+            (outputLogFrame, 'bottom', 5, 90),
+            (convertButton, 'top', 5, 90)
+        ])
 
     cmds.showWindow(w)
     checkFFMpeg()
