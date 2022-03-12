@@ -30,11 +30,14 @@ import threading
 import subprocess
 import json
 import re
+import glob
+import imghdr
+import string
 from collections import namedtuple
 
 FileFormat = namedtuple('FileFormat', ['name', 'extension', 'is_movie'])
 
-VERSION = '1.2'
+VERSION = '1.3'
 FILE_FORMATS = [FileFormat('PNG', 'png', False), FileFormat('JPEG', 'jpg', False), FileFormat('MP4', 'mp4', True), FileFormat('AVI', 'avi', True)]
 
 def popen(cmd, stdout, stderr):
@@ -244,12 +247,37 @@ def run():
     ffmpegTextField = cmds.textField(parent=row, text=getDefaultFFMpeg(getSelectedOperatingSystem()), editable=False)
     browseFFMpegButton = cmds.button(label='Browse', parent=row, command=browseFFMpeg)
 
+    def imagePathToSeqPattern(imgPath):
+        numStart = None
+        numEnd = None
+        for i in range(len(imgPath)-1, -1, -1):
+            if imgPath[i] in string.digits:
+                numEnd = i + 1
+                break
+        if numEnd is None:
+            return None
+        for j in range(numEnd-1, -1, -1):
+            if imgPath[j] not in string.digits:
+                numStart = j + 1
+                break
+        if numStart is None:
+            numStart = 0
+        if imgPath[numStart] == '0' and numEnd - numStart > 1:
+            wildcard = '%{}d'.format(numEnd - numStart)
+        else:
+            wildcard = '%d'
+        return imgPath[0:numStart] + wildcard + imgPath[numEnd:]
+
     def browseInput(*args):
         currentText = cmds.textField(inputTextField, q=True, text=True)
         filename = cmds.fileDialog2(fileMode=1, caption="Select Movie File", **fileDialogStartDir(currentText))
         if filename is None:
             return
         path = os.path.abspath(filename[0])
+        if imghdr.what(path) is not None:
+            patPath = imagePathToSeqPattern(path)
+            if patPath is not None:
+                path = patPath
         cmds.textField(inputTextField, edit=True, text=path)
         resetMovieSize()
 
@@ -424,6 +452,14 @@ def run():
             return False
         return w, h
 
+    def inputPathToGlob(inputMoviePath):
+        for i in range(len(inputMoviePath)):
+            if inputMoviePath[i] == '%':
+                for j in range(i + 1, len(inputMoviePath)):
+                    if inputMoviePath[j] == 'd':
+                        return inputMoviePath[0:i] + '*' + inputMoviePath[j+1:]
+        return inputMoviePath
+
     def convertMovie(*args):
         global cancelSignal
         ffmpegCommand = cmds.textField(ffmpegTextField, q=True, text=True)
@@ -455,7 +491,7 @@ def run():
                 message='Please specify both the input movie path and the output directory path.',
                 button='OK')
             return
-        if not os.path.exists(inputMoviePath):
+        if len(glob.glob(inputPathToGlob(inputMoviePath))) == 0:
             cmds.confirmDialog(
                 title='Error: Invalid input movie path', 
                 message='The given input movie path does not exist.',
