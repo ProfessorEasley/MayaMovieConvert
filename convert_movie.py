@@ -38,7 +38,7 @@ from functools import partial
 
 FileFormat = namedtuple('FileFormat', ['name', 'extension', 'is_movie'])
 
-VERSION = '2.0'
+VERSION = '2.1'
 FILE_FORMATS = [FileFormat('PNG', 'png', False), FileFormat('JPEG', 'jpg', False), FileFormat('MP4', 'mp4', True), FileFormat('AVI', 'avi', True)]
 
 def popen(cmd, stdout, stderr):
@@ -597,7 +597,7 @@ def run():
         filterGraph = []
         if len(inputSources) > 1:
             for srcIndex in range(len(inputSources)):
-                filterGraph.append('[{}:v] scale={}:{} [vs{}]'.format(srcIndex, outputSize[0], outputSize[1], srcIndex))
+                filterGraph.append('[{}:v] scale={}:{},setsar=1:1 [vs{}]'.format(srcIndex, outputSize[0], outputSize[1], srcIndex))
             concatFilter = ''
             if hasAudioStream:
                 for srcIndex in range(len(inputSources)):
