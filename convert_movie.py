@@ -38,7 +38,7 @@ from functools import partial
 
 FileFormat = namedtuple('FileFormat', ['name', 'extension', 'is_movie'])
 
-VERSION = '2.1'
+VERSION = '2.2'
 FILE_FORMATS = [FileFormat('PNG', 'png', False), FileFormat('JPEG', 'jpg', False), FileFormat('MP4', 'mp4', True), FileFormat('AVI', 'avi', True)]
 
 def popen(cmd, stdout, stderr):
@@ -327,7 +327,7 @@ def run():
         sourceIndex = findSourceIndex(sourceKey)
         source = sources[sourceIndex]
         currentText = cmds.textField(source['inputTextField'], q=True, text=True)
-        filename = cmds.fileDialog2(fileMode=1, caption="Select Movie File", **fileDialogStartDir(currentText))
+        filename = cmds.fileDialog2(fileMode=1, caption="Select Movie or Image Sequence", **fileDialogStartDir(currentText))
         if filename is None:
             return
         path = os.path.abspath(filename[0])
