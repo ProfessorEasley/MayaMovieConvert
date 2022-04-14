@@ -317,7 +317,14 @@ def run():
                 break
         if numStart is None:
             numStart = 0
-        if imgPath[numStart] == '0' and numEnd - numStart > 1:
+        imageSeqPaths = glob.glob('{}*{}'.format(imgPath[0:numStart], imgPath[numEnd:]))
+        anyStartWithZero = False
+        if numEnd - numStart > 1:
+            for path in imageSeqPaths:
+                if path[numStart] == '0':
+                    anyStartWithZero = True
+                    break
+        if anyStartWithZero:
             wildcard = '%{}d'.format(numEnd - numStart)
         else:
             wildcard = '%d'
