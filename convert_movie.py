@@ -223,19 +223,23 @@ def run():
         if 'keepProportions' in settings:
             kp = settings['keepProportions']
             cmds.checkBox(keepProportionsCheckBox, edit=True, value=kp)
+        onSettingChanged()
         return True
 
     def resetSettings():
         setNumSources(0)
         setNumSources(1)
         cmds.textField(outputTextField, edit=True, text='')
-        cmds.textField(outputFileNameTextField, edit=True, text='')
+        cmds.textField(outputFileNameTextField, edit=True, text='frame')
         cmds.optionMenu(numDigitsMenu, edit=True, select=4)
         cmds.optionMenu(fileFormatMenu, edit=True, select=1)
         cmds.textField(widthTextField, edit=True, text='')
         cmds.textField(heightTextField, edit=True, text='')
         cmds.checkBox(keepProportionsCheckBox, edit=True, value=True)
         resetOutputMovieSize()
+
+    def onSettingChanged(*args):
+        saveSettings(getAutoSaveConfigPath())
 
     def onSaveSettings(*args):
         path = cmds.fileDialog2(fileMode=0, caption='Save Settings As..', fileFilter='*.json')
@@ -249,10 +253,15 @@ def run():
         if path is None or len(path) < 1:
             return
         path = path[0]
-        loadSettings(path)
+        if not loadSettings(path):
+            cmds.confirmDialog(
+                title='Error: Invalid settings',
+                message='Cannot load the provided settings file (it is invalid)',
+                button='OK')
 
     def onClearSettings(*args):
         resetSettings()
+        onSettingChanged()
 
     def openInstructions(*args):
         cmds.showHelp('https://docs.google.com/document/d/1XVG1hAOgN7OIce_GG3SmsO9xnhpXGswg4ClSeiGN6ao/edit?usp=sharing', absolute=True)
@@ -446,6 +455,7 @@ def run():
         readInputMovieProperties(sourceKey)
         updateSourceTitle(sourceKey)
         resetOutputMovieSize()
+        onSettingChanged()
 
     inputOptionsFrame = cmds.frameLayout(label='Input Options', collapsable=True,  parent=l)
     sourcesScroll = cmds.scrollLayout(parent=inputOptionsFrame, height=150, childResizable=True)
@@ -483,6 +493,7 @@ def run():
             sources[sourceIndex-1] = sources[sourceIndex]
             sources[sourceIndex] = t
         updateSourcesLayout()
+        onSettingChanged()
 
     def onMoveDown(sourceKey, *args):
         sourceIndex = findSourceIndex(sourceKey)
@@ -491,6 +502,7 @@ def run():
             sources[sourceIndex+1] = sources[sourceIndex]
             sources[sourceIndex] = t
         updateSourcesLayout()
+        onSettingChanged()
 
     def onDelete(sourceKey, *args):
         global sources
@@ -498,11 +510,14 @@ def run():
         cmds.deleteUI(sources[sourceIndex]['frame'])
         sources = sources[:sourceIndex] + sources[sourceIndex+1:]
         updateSourcesLayout()
+        resetOutputMovieSize()
+        onSettingChanged()
 
     def onInputTextFieldChanged(sourceKey, *args):
         readInputMovieProperties(sourceKey)
         updateSourceTitle(sourceKey)
         resetOutputMovieSize()
+        onSettingChanged()
 
     def setNumSources(n):
         global sources
@@ -540,6 +555,7 @@ def run():
 
     def onAddSource(*args):
         setNumSources(len(sources) + 1)
+        onSettingChanged()
 
     addSourceButton = cmds.button(label='Add Source', parent=sourcesLayout, command=onAddSource)
     setNumSources(1)
@@ -557,6 +573,7 @@ def run():
             sourceW, sourceH = size
             h = int(round((float(sourceH)/sourceW)*w/2.0))*2
             cmds.textField(heightTextField, edit=True, text=str(h))
+        onSettingChanged()
 
     def onHeightChanged(*args):
         try:
@@ -571,6 +588,7 @@ def run():
             sourceW, sourceH = size
             w = int(round((float(sourceW)/sourceH)*h/2.0))*2
             cmds.textField(widthTextField, edit=True, text=str(w))
+        onSettingChanged()
 
     outputOptionsFrame = cmds.frameLayout(label='Output Options', collapsable=True, parent=l)
 
@@ -581,16 +599,17 @@ def run():
             return
         path = os.path.abspath(filename[0])
         cmds.textField(outputTextField, edit=True, text=path)
+        onSettingChanged()
 
     row = cmds.rowLayout(parent=outputOptionsFrame, numberOfColumns=3, columnWidth3=(90, 190, 50), columnAttach3=('both', 'both', 'both'), adjustableColumn=2)
     cmds.text('Output Directory:', parent=row)
-    outputTextField = cmds.textField(parent=row)
+    outputTextField = cmds.textField(parent=row, changeCommand=onSettingChanged)
     browseOutputButton = cmds.button(label='Browse', parent=row, command=browseOutput)
 
     row = cmds.rowLayout(parent=outputOptionsFrame, numberOfColumns=3, columnWidth3=(60, 100, 160), columnAttach3=('both', 'both', 'both'), adjustableColumn=2)
     cmds.text('File Name:', parent=row)
-    outputFileNameTextField = cmds.textField(parent=row, text='frame')
-    numDigitsMenu = cmds.optionMenu(label='  Frame Digits: ', parent=row)
+    outputFileNameTextField = cmds.textField(parent=row, text='frame', changeCommand=onSettingChanged)
+    numDigitsMenu = cmds.optionMenu(label='  Frame Digits: ', changeCommand=onSettingChanged, parent=row)
     cmds.menuItem(label='1')
     cmds.menuItem(label='2')
     cmds.menuItem(label='3')
@@ -600,6 +619,7 @@ def run():
     def updateUIForFileFormat(*args):
         fmt = FILE_FORMATS[cmds.optionMenu(fileFormatMenu, q=True, select=True)-1]
         cmds.optionMenu(numDigitsMenu, edit=True, enable=not fmt.is_movie)
+        onSettingChanged()
 
     fileFormatMenu = cmds.optionMenu(label='File Format:', parent=outputOptionsFrame, changeCommand=updateUIForFileFormat)
     for option in FILE_FORMATS:
