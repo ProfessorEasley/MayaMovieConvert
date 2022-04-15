@@ -56,30 +56,30 @@ def isValidCommand(cmd):
     except OSError:
         return False
 
-def getConfigPath():
-    scriptsDir = os.path.dirname(os.path.realpath(__file__))
-    name = os.path.splitext(os.path.basename(__file__))[0] + '.config.json'
-    return os.path.join(scriptsDir, name)
-
 def getOutputLogPath():
     scriptsDir = os.path.dirname(os.path.realpath(__file__))
     return os.path.join(scriptsDir, 'ffmpeg_output.txt')
 
-def readSettings():
-    cfgPath = getConfigPath()
+def getFFmpegConfigPath():
+    scriptsDir = os.path.dirname(os.path.realpath(__file__))
+    name = os.path.splitext(os.path.basename(__file__))[0] + '.ffmpeg.json'
+    return os.path.join(scriptsDir, name)
+
+def readFFmpegSettings():
+    cfgPath = getFFmpegConfigPath()
     if os.path.exists(cfgPath):
         with open(cfgPath, 'r') as f:
             return json.load(f)
     else:
         return dict()
 
-def writeSettings(settings):
-    cfgPath = getConfigPath()
+def writeFFmpegSettings(settings):
+    cfgPath = getFFmpegConfigPath()
     with open(cfgPath, 'w') as f:
         json.dump(settings, f)
 
 def getDefaultOperatingSystem():
-    settings = readSettings()
+    settings = readFFmpegSettings()
     if 'operatingSystem' in settings:
         return settings['operatingSystem']
     elif cmds.about(windows=True):
@@ -88,7 +88,7 @@ def getDefaultOperatingSystem():
         return 'MAC'
 
 def getDefaultFFMpeg(operatingSystem):
-    settings = readSettings()
+    settings = readFFmpegSettings()
     scriptsDir = os.path.dirname(os.path.realpath(__file__))
     if operatingSystem == 'PC':
         defaultCmd = os.path.join(scriptsDir, 'ffmpeg', 'bin', 'ffmpeg.exe')
@@ -153,12 +153,106 @@ def fileDialogStartDir(currentText, isDir=False):
     else:
         return dict()
 
+def getAutoSaveConfigPath():
+    scriptsDir = os.path.dirname(os.path.realpath(__file__))
+    name = os.path.splitext(os.path.basename(__file__))[0] + '.autosave.json'
+    return os.path.join(scriptsDir, name)
+
 def run():
     if cmds.window('ConvertMovie', exists=True):
         cmds.deleteUI('ConvertMovie', window=True)
 
     w = cmds.window('ConvertMovie', width=380, height=400, title='Convert Movie v{}'.format(VERSION), menuBar=True)
     l = cmds.formLayout(parent=w, numberOfDivisions=100)
+
+    def saveSettings(jsonPath):
+        settings = {}
+        settings['inputSources'] = [{'input': cmds.textField(source['inputTextField'], q=True, text=True)} for source in sources]
+        settings['outputDirectory'] = cmds.textField(outputTextField, q=True, text=True)
+        settings['outputSize'] = parseOutputSize()
+        settings['keepProportions'] = cmds.checkBox(keepProportionsCheckBox, q=True, value=True)
+        settings['outputFileName'] = cmds.textField(outputFileNameTextField, q=True, text=True).strip()
+        settings['frameNumDigits'] = cmds.optionMenu(numDigitsMenu, q=True, select=True)
+        fileFormat = cmds.optionMenu(fileFormatMenu, q=True, select=True)
+        settings['fileFormat'] = FILE_FORMATS[fileFormat-1].name
+        with open(jsonPath, 'w') as f:
+            json.dump(settings, f)
+
+    def loadSettings(jsonPath):
+        settings = dict()
+        if os.path.exists(jsonPath):
+            try:
+                with open(jsonPath, 'r') as f:
+                    settings = json.load(f)
+            except:
+                return False
+        if 'inputSources' in settings:
+            inputSources = settings['inputSources']
+            setNumSources(len(inputSources))
+            for sourceIndex in range(len(inputSources)):
+                jsonSource = inputSources[sourceIndex]
+                source = sources[sourceIndex]
+                cmds.textField(source['inputTextField'], edit=True, text=jsonSource['input'])
+            if len(sources) > 1:
+                for source in sources:
+                    cmds.frameLayout(source['frame'], edit=True, collapse=True)
+            for source in sources:
+                sourceKey = source['key']
+                readInputMovieProperties(sourceKey)
+                updateSourceTitle(sourceKey)
+            updateSourcesLayout()
+        if 'outputDirectory' in settings:
+            cmds.textField(outputTextField, edit=True, text=settings['outputDirectory'])
+        if 'outputFileName' in settings:
+            outputFileName = settings['outputFileName']
+            cmds.textField(outputFileNameTextField, edit=True, text=outputFileName)
+        if 'frameNumDigits' in settings:
+            cmds.optionMenu(numDigitsMenu, edit=True, select=settings['frameNumDigits'])
+        if 'fileFormat' in settings:
+            try:
+                index = list(map(lambda opt: opt.name, FILE_FORMATS)).index(settings['fileFormat'])+1
+                cmds.optionMenu(fileFormatMenu, edit=True, select=index)
+                updateUIForFileFormat()
+            except ValueError:
+                pass
+        if 'outputSize' in settings:
+            cs = settings['outputSize']
+            if cs:
+                cmds.textField(widthTextField, edit=True, text=str(cs[0]))
+                cmds.textField(heightTextField, edit=True, text=str(cs[1]))
+        if 'keepProportions' in settings:
+            kp = settings['keepProportions']
+            cmds.checkBox(keepProportionsCheckBox, edit=True, value=kp)
+        return True
+
+    def resetSettings():
+        setNumSources(0)
+        setNumSources(1)
+        cmds.textField(outputTextField, edit=True, text='')
+        cmds.textField(outputFileNameTextField, edit=True, text='')
+        cmds.optionMenu(numDigitsMenu, edit=True, select=4)
+        cmds.optionMenu(fileFormatMenu, edit=True, select=1)
+        cmds.textField(widthTextField, edit=True, text='')
+        cmds.textField(heightTextField, edit=True, text='')
+        cmds.checkBox(keepProportionsCheckBox, edit=True, value=True)
+        resetOutputMovieSize()
+
+    def onSaveSettings(*args):
+        path = cmds.fileDialog2(fileMode=0, caption='Save Settings As..', fileFilter='*.json')
+        if not path or len(path) < 1:
+            return
+        path = path[0]
+        saveSettings(path)
+
+    def onLoadSettings(*args):
+        path = cmds.fileDialog2(fileMode=1, caption="Select Settings File", fileFilter='*.json')
+        if path is None or len(path) < 1:
+            return
+        path = path[0]
+        loadSettings(path)
+
+    def onClearSettings(*args):
+        resetSettings()
 
     def openInstructions(*args):
         cmds.showHelp('https://docs.google.com/document/d/1XVG1hAOgN7OIce_GG3SmsO9xnhpXGswg4ClSeiGN6ao/edit?usp=sharing', absolute=True)
@@ -172,10 +266,15 @@ def run():
             message='Convert Movie Script v{}\nWritten by Sasha Volokh (2022)'.format(VERSION),
             button='OK')
 
-    m = cmds.menu(label='Help', helpMenu=True, parent=w)
-    cmds.menuItem(label='Instructions', parent=m, command=openInstructions)
-    cmds.menuItem(label='YouTube Tutorial', parent=m, command=openYouTubeTutorial)
-    cmds.menuItem(label='About', parent=m, command=openAbout)
+    settingsMenu = cmds.menu(label='Settings', parent=w)
+    cmds.menuItem(label='Save As...', parent=settingsMenu, command=onSaveSettings)
+    cmds.menuItem(label='Open...', parent=settingsMenu, command=onLoadSettings)
+    cmds.menuItem(label='Clear', parent=settingsMenu, command=onClearSettings)
+
+    helpMenu = cmds.menu(label='Help', helpMenu=True, parent=w)
+    cmds.menuItem(label='Instructions', parent=helpMenu, command=openInstructions)
+    cmds.menuItem(label='YouTube Tutorial', parent=helpMenu, command=openYouTubeTutorial)
+    cmds.menuItem(label='About', parent=helpMenu, command=openAbout)
 
     def getDefaultOutputMovieSize():
         maxWidth = 0
@@ -196,6 +295,7 @@ def run():
         if size is not None:
             cmds.textField(widthTextField, edit=True, text=str(size[0]))
             cmds.textField(heightTextField, edit=True, text=str(size[1]))
+            cmds.checkBox(keepProportionsCheckBox, edit=True, enable=True)
         else:
             cmds.textField(widthTextField, edit=True, text='')
             cmds.textField(heightTextField, edit=True, text='')
@@ -268,13 +368,13 @@ def run():
             return
         path = os.path.abspath(filename[0])
         cmds.textField(ffmpegTextField, edit=True, text=path)
-        settings = readSettings()
+        settings = readFFmpegSettings()
         operatingSystem = getSelectedOperatingSystem()
         if operatingSystem == 'PC':
             settings['ffmpegCommandPC'] = path
         else:
             settings['ffmpegCommandMAC'] = path
-        writeSettings(settings)
+        writeFFmpegSettings(settings)
         checkFFMpeg()
 
     def getSelectedOperatingSystem():
@@ -286,9 +386,9 @@ def run():
 
     def onSelect(operatingSystem):
         def handler(*args):
-            settings = readSettings()
+            settings = readFFmpegSettings()
             settings['operatingSystem'] = operatingSystem
-            writeSettings(settings)
+            writeFFmpegSettings(settings)
             cmds.textField(ffmpegTextField, edit=True, text=getDefaultFFMpeg(operatingSystem))
             checkFFMpeg()
         return handler
@@ -664,7 +764,7 @@ def run():
                         break
                 time.sleep(0.1)
 
-    def parseoutputSize():
+    def parseOutputSize():
         widthValue = cmds.textField(widthTextField, q=True, text=True).strip()
         heightValue = cmds.textField(heightTextField, q=True, text=True).strip()
         if len(widthValue) == 0 or len(heightValue) == 0:
@@ -693,7 +793,6 @@ def run():
                     message='FFmpeg was not found, please specify the path to the ffmpeg executable',
                     button='OK')
             return
-        settings = readSettings()
         inputSources = []
         for sourceIndex in range(len(sources)):
             source = sources[sourceIndex]
@@ -706,18 +805,10 @@ def run():
                     button='OK')
                 return
         outputDir = cmds.textField(outputTextField, q=True, text=True)
-        outputSize = parseoutputSize()
+        outputSize = parseOutputSize()
         outputFileName = cmds.textField(outputFileNameTextField, q=True, text=True).strip()
         frameNumDigits = cmds.optionMenu(numDigitsMenu, q=True, select=True)
         fileFormat = cmds.optionMenu(fileFormatMenu, q=True, select=True)
-        settings['inputSources'] = [{'input': cmds.textField(source['inputTextField'], q=True, text=True)} for source in sources]
-        settings['outputDirectory'] = outputDir
-        settings['outputSize'] = outputSize
-        settings['keepProportions'] = cmds.checkBox(keepProportionsCheckBox, q=True, value=True)
-        settings['outputFileName'] = outputFileName
-        settings['frameNumDigits'] = frameNumDigits
-        settings['fileFormat'] = FILE_FORMATS[fileFormat-1].name
-        writeSettings(settings)
         fileFormat = FILE_FORMATS[fileFormat-1].extension
         if len(outputDir) == 0:
             cmds.confirmDialog(
@@ -749,6 +840,7 @@ def run():
                 message='Please specify a file name for the output images.',
                 button='OK')
             return
+        saveSettings(getAutoSaveConfigPath())
         setEditableUIEnabled(False)
         cmds.scrollField(outputLog, edit=True, text='')
         def cancel(*args):
@@ -762,32 +854,6 @@ def run():
 
     convertButton = cmds.button(label='Convert', command=convertMovie, parent=l)
     cmds.text(label='', parent=l)
-
-    currentSettings = readSettings()
-    if 'inputSources' in currentSettings:
-        inputSources = currentSettings['inputSources']
-        setNumSources(len(inputSources))
-        for sourceIndex in range(len(inputSources)):
-            jsonSource = inputSources[sourceIndex]
-            source = sources[sourceIndex]
-            cmds.textField(source['inputTextField'], edit=True, text=jsonSource['input'])
-        if len(sources) > 1:
-            for source in sources:
-                cmds.frameLayout(source['frame'], edit=True, collapse=True)
-    if 'outputDirectory' in currentSettings:
-        cmds.textField(outputTextField, edit=True, text=currentSettings['outputDirectory'])
-    if 'outputFileName' in currentSettings:
-        outputFileName = currentSettings['outputFileName']
-        cmds.textField(outputFileNameTextField, edit=True, text=outputFileName)
-    if 'frameNumDigits' in currentSettings:
-        cmds.optionMenu(numDigitsMenu, edit=True, select=currentSettings['frameNumDigits'])
-    if 'fileFormat' in currentSettings:
-        try:
-            index = list(map(lambda opt: opt.name, FILE_FORMATS)).index(currentSettings['fileFormat'])+1
-            cmds.optionMenu(fileFormatMenu, edit=True, select=index)
-            updateUIForFileFormat()
-        except ValueError:
-            pass
 
     cmds.formLayout(l, edit=True, 
         attachForm=[
@@ -817,12 +883,6 @@ def run():
     cmds.showWindow(w)
     checkFFMpeg()
 
-    # load these after checking FFMpeg since it will reset the width/height
-    if 'outputSize' in currentSettings:
-        cs = currentSettings['outputSize']
-        if cs:
-            cmds.textField(widthTextField, edit=True, text=str(cs[0]))
-            cmds.textField(heightTextField, edit=True, text=str(cs[1]))
-    if 'keepProportions' in currentSettings:
-        kp = currentSettings['keepProportions']
-        cmds.checkBox(keepProportionsCheckBox, edit=True, value=kp)
+    autoSavePath = getAutoSaveConfigPath()
+    if os.path.exists(autoSavePath):
+        loadSettings(autoSavePath)
