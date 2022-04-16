@@ -199,7 +199,6 @@ def run():
             for source in sources:
                 sourceKey = source['key']
                 readInputMovieProperties(sourceKey)
-                updateSourceTitle(sourceKey)
             updateSourcesLayout()
         if 'outputDirectory' in settings:
             cmds.textField(outputTextField, edit=True, text=settings['outputDirectory'])
@@ -337,23 +336,6 @@ def run():
             print('failed to get movie resolution: {}'.format(e))
             fail(source)
 
-    def updateSourceTitle(sourceKey, *args):
-        global sources
-        sourceIndex = findSourceIndex(sourceKey)
-        source = sources[sourceIndex]
-        inputMoviePath = cmds.textField(source['inputTextField'], q=True, text=True)
-        label = 'Source {}'.format(sourceIndex + 1)
-        if len(inputMoviePath) != 0 and len(glob.glob(inputPathToGlob(inputMoviePath))) > 0:
-            filename = os.path.basename(inputMoviePath)
-            maxFilenameChars = 30
-            if len(filename) > maxFilenameChars:
-                filename = filename[:maxFilenameChars-3] + '...'
-            label += ': {}'.format(filename)
-        if 'size' in source and source['size'] is not None:
-            w, h = source['size']
-            label += ' ({}x{})'.format(w, h)
-        cmds.frameLayout(source['frame'], edit=True, label=label)
-
     def checkFFMpeg():
         ffmpegCmd = cmds.textField(ffmpegTextField, q=True, text=True)
         if isValidCommand(ffmpegCmd):
@@ -361,7 +343,7 @@ def run():
             for i in range(len(sources)):
                 sourceKey = sources[i]['key']
                 readInputMovieProperties(sourceKey)
-                updateSourceTitle(sourceKey)
+            updateSourcesLayout()
             resetOutputMovieSize()
         else:
             cmds.textField(ffmpegTextField, edit=True, backgroundColor=(0.7, 0.0, 0.0))
@@ -440,7 +422,7 @@ def run():
         return imgPath[0:numStart] + wildcard + imgPath[numEnd:]
 
     def browseInput(sourceKey, *args):
-        sourceIndex = findSourceIndex(sourceKey)
+        sourceIndex = findSourceIndex(sourceKey)    
         source = sources[sourceIndex]
         currentText = cmds.textField(source['inputTextField'], q=True, text=True)
         filename = cmds.fileDialog2(fileMode=1, caption="Select Movie or Image Sequence", **fileDialogStartDir(currentText))
@@ -453,13 +435,43 @@ def run():
                 path = patPath
         cmds.textField(source['inputTextField'], edit=True, text=path)
         readInputMovieProperties(sourceKey)
-        updateSourceTitle(sourceKey)
+        updateSourcesLayout()
         resetOutputMovieSize()
         onSettingChanged()
 
-    inputOptionsFrame = cmds.frameLayout(label='Input Options', collapsable=True,  parent=l)
-    sourcesScroll = cmds.scrollLayout(parent=inputOptionsFrame, height=150, childResizable=True)
-    sourcesLayout = cmds.columnLayout(parent=sourcesScroll, columnAttach=('both', 0), rowSpacing=5, adjustableColumn=True)
+    def onInputOptionsExpand(*args):
+        cmds.frameLayout(hiddenSourceFrame, edit=True, labelVisible=False, borderVisible=False, visible=False)
+
+    inputOptionsFrame = cmds.frameLayout(label='Input Options', collapsable=True, expandCommand=onInputOptionsExpand, parent=l)
+    hiddenSourceFrame = cmds.frameLayout(parent=inputOptionsFrame, labelVisible=False, borderVisible=False, visible=False)
+    inputOptionsLayout = cmds.columnLayout(parent=inputOptionsFrame, columnAttach=('both', 0), rowSpacing=5, adjustableColumn=True)
+
+    global sourcesLayoutUpdating 
+    sourcesLayoutUpdating = False
+    def onSourceSelectionChanged(*args):
+        global sourcesLayoutUpdating
+        if not sourcesLayoutUpdating:
+            updateSourcesLayout()
+
+    sourcesList = cmds.iconTextScrollList(parent=inputOptionsLayout, height=60, selectCommand=onSourceSelectionChanged)
+    currentSourceFrame = cmds.frameLayout(labelVisible=False, borderVisible=False, parent=inputOptionsLayout)
+
+    def getCurrentSourceIndex():
+        indices = cmds.iconTextScrollList(sourcesList, q=True, selectIndexedItem=True)
+        if indices is not None:
+            return indices[0]-1
+        else:
+            return None
+
+    # call setSourcesLayout() again after invoking this
+    def setCurrentSourceIndex(index):
+        cmds.iconTextScrollList(sourcesList, edit=True, deselectAll=True)
+        if index is not None:
+            import traceback
+            for e in traceback.format_stack():
+                print(e)
+            title = getSourceTitle(sources[index]['key'])
+            cmds.iconTextScrollList(sourcesList, edit=True, selectItem=title)
 
     global sources
     sources = []
@@ -468,23 +480,49 @@ def run():
             if sources[i]['key'] == sourceKey:
                 return i
         raise Exception('failed to find index of source with key: {}'.format(sourceKey))
+
+    def getSourceTitle(sourceKey, *args):
+        global sources
+        sourceIndex = findSourceIndex(sourceKey)
+        source = sources[sourceIndex]
+        inputMoviePath = cmds.textField(source['inputTextField'], q=True, text=True)
+        label = 'Source {}'.format(sourceIndex + 1)
+        if len(inputMoviePath) != 0 and len(glob.glob(inputPathToGlob(inputMoviePath))) > 0:
+            filename = os.path.basename(inputMoviePath)
+            maxFilenameChars = 30
+            if len(filename) > maxFilenameChars:
+                filename = filename[:maxFilenameChars-3] + '...'
+            label += ': {}'.format(filename)
+        if 'size' in source and source['size'] is not None:
+            w, h = source['size']
+            label += ' ({}x{})'.format(w, h)
+        return label
     
     def updateSourcesLayout():
-        # first move the sources to another layout, then move them in the correct order back to the sources layout
-        cmds.button(addSourceButton, edit=True, parent=sourcesScroll)
-        for sourceIndex in range(len(sources)):
-            source = sources[sourceIndex]
-            sourceFrame = source['frame']
-            cmds.frameLayout(sourceFrame, edit=True, parent=sourcesScroll)
-        for sourceIndex in range(len(sources)):
-            source = sources[sourceIndex]
-            sourceFrame = source['frame']
-            cmds.frameLayout(sourceFrame, edit=True, parent=sourcesLayout)
-            updateSourceTitle(source['key'])
-            cmds.button(source['moveUpButton'], edit=True, enable=sourceIndex > 0)
-            cmds.button(source['moveDownButton'], edit=True, enable=sourceIndex < len(sources) - 1)
-            cmds.button(source['deleteButton'], edit=True, enable=len(sources) > 1)
-        cmds.button(addSourceButton, edit=True, parent=sourcesLayout)
+        global sourcesLayoutUpdating
+        sourcesLayoutUpdating = True
+        try:
+            if len(sources) > 0:
+                currentIndex = getCurrentSourceIndex()
+                if currentIndex is None:
+                    currentIndex = 0
+                cmds.iconTextScrollList(sourcesList, edit=True, removeAll=True)
+                for sourceIndex in range(len(sources)):
+                    source = sources[sourceIndex]
+                    sourceFrame = source['frame']
+                    title = getSourceTitle(source['key'])
+                    cmds.iconTextScrollList(sourcesList, edit=True, append=(title,))
+                    cmds.frameLayout(sourceFrame, edit=True, label=title, parent=hiddenSourceFrame)
+                    cmds.button(source['moveUpButton'], edit=True, enable=sourceIndex > 0)
+                    cmds.button(source['moveDownButton'], edit=True, enable=sourceIndex < len(sources) - 1)
+                    cmds.button(source['deleteButton'], edit=True, enable=len(sources) > 1)
+                setCurrentSourceIndex(currentIndex)
+                currentSource = sources[currentIndex]
+                cmds.frameLayout(currentSource['frame'], edit=True, parent=currentSourceFrame)
+            else:
+                cmds.iconTextScrollList(sourcesList, edit=True, removeAll=True)
+        finally:
+            sourcesLayoutUpdating = False
 
     def onMoveUp(sourceKey, *args):
         sourceIndex = findSourceIndex(sourceKey)
@@ -492,8 +530,10 @@ def run():
             t = sources[sourceIndex-1]
             sources[sourceIndex-1] = sources[sourceIndex]
             sources[sourceIndex] = t
-        updateSourcesLayout()
-        onSettingChanged()
+            updateSourcesLayout()
+            setCurrentSourceIndex(sourceIndex-1)
+            updateSourcesLayout()
+            onSettingChanged()
 
     def onMoveDown(sourceKey, *args):
         sourceIndex = findSourceIndex(sourceKey)
@@ -501,22 +541,34 @@ def run():
             t = sources[sourceIndex+1]
             sources[sourceIndex+1] = sources[sourceIndex]
             sources[sourceIndex] = t
-        updateSourcesLayout()
-        onSettingChanged()
+            updateSourcesLayout()
+            setCurrentSourceIndex(sourceIndex+1)
+            updateSourcesLayout()
+            onSettingChanged()
 
     def onDelete(sourceKey, *args):
         global sources
         sourceIndex = findSourceIndex(sourceKey)
         cmds.deleteUI(sources[sourceIndex]['frame'])
         sources = sources[:sourceIndex] + sources[sourceIndex+1:]
+        currentIndex = getCurrentSourceIndex()
+        setCurrentSourceIndex(0)
+        updateSourcesLayout()
+        setCurrentSourceIndex(len(sources)-1 if currentIndex >= len(sources) else currentIndex)
         updateSourcesLayout()
         resetOutputMovieSize()
         onSettingChanged()
 
     def onInputTextFieldChanged(sourceKey, *args):
         readInputMovieProperties(sourceKey)
-        updateSourceTitle(sourceKey)
         resetOutputMovieSize()
+        updateSourcesLayout()
+        onSettingChanged()
+    
+    def onAddSource(sourceKey, *args):
+        setNumSources(len(sources) + 1)
+        setCurrentSourceIndex(len(sources)-1)
+        updateSourcesLayout()
         onSettingChanged()
 
     def setNumSources(n):
@@ -527,7 +579,7 @@ def run():
             sources = sources[:-1]
         while len(sources) < n:
             sourceNum = len(sources) + 1
-            sourceFrame = cmds.frameLayout(label='Source  {}'.format(sourceNum), collapsable=True, backgroundShade=True, marginHeight=5, parent=sourcesLayout)
+            sourceFrame = cmds.frameLayout(label='Source  {}'.format(sourceNum), collapsable=False, backgroundShade=True, marginHeight=5, parent=hiddenSourceFrame)
             sourceKey = sourceFrame # use source frame id as key
             
             row = cmds.rowLayout(parent=sourceFrame, numberOfColumns=3, columnWidth3=(90, 190, 50), columnAttach3=('both', 'both', 'both'), adjustableColumn=2)
@@ -537,10 +589,11 @@ def run():
 
             sourceSizeText = cmds.text('Source Size: Unknown', parent=sourceFrame)
 
-            row = cmds.rowLayout(parent=sourceFrame, numberOfColumns=3, columnWidth3=(110, 100, 100), columnAttach3=('both', 'both', 'both'), adjustableColumn=3)
+            row = cmds.rowLayout(parent=sourceFrame, numberOfColumns=4, columnWidth4=(85, 75, 75, 75), columnAttach4=('both', 'both', 'both', 'both'), adjustableColumn=4)
             moveUpButton = cmds.button('Move Up', parent=row, command=partial(onMoveUp, sourceKey))
             moveDownButton = cmds.button('Move Down', parent=row, command=partial(onMoveDown, sourceKey))
             deleteButton = cmds.button('Delete', parent=row, command=partial(onDelete, sourceKey))
+            addSourceButton = cmds.button(label='Add Source', parent=row, command=partial(onAddSource, sourceKey))
             sources.append({
                 'key': sourceKey, 
                 'frame': sourceFrame,
@@ -549,15 +602,11 @@ def run():
                 'browseInputButton': browseInputButton,
                 'moveUpButton':  moveUpButton,
                 'moveDownButton': moveDownButton,
-                'deleteButton': deleteButton
+                'deleteButton': deleteButton,
+                'addSourceButton': addSourceButton
             })
         updateSourcesLayout()
 
-    def onAddSource(*args):
-        setNumSources(len(sources) + 1)
-        onSettingChanged()
-
-    addSourceButton = cmds.button(label='Add Source', parent=sourcesLayout, command=onAddSource)
     setNumSources(1)
 
     def onWidthChanged(*args):
