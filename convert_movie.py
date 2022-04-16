@@ -467,9 +467,6 @@ def run():
     def setCurrentSourceIndex(index):
         cmds.iconTextScrollList(sourcesList, edit=True, deselectAll=True)
         if index is not None:
-            import traceback
-            for e in traceback.format_stack():
-                print(e)
             title = getSourceTitle(sources[index]['key'])
             cmds.iconTextScrollList(sourcesList, edit=True, selectItem=title)
 
