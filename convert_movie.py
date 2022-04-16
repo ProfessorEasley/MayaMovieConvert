@@ -443,8 +443,8 @@ def run():
         cmds.frameLayout(hiddenSourceFrame, edit=True, labelVisible=False, borderVisible=False, visible=False)
 
     inputOptionsFrame = cmds.frameLayout(label='Input Options', collapsable=True, expandCommand=onInputOptionsExpand, parent=l)
-    hiddenSourceFrame = cmds.frameLayout(parent=inputOptionsFrame, labelVisible=False, borderVisible=False, visible=False)
-    inputOptionsLayout = cmds.columnLayout(parent=inputOptionsFrame, columnAttach=('both', 0), rowSpacing=5, adjustableColumn=True)
+    hiddenSourceFrame = cmds.frameLayout(parent=inputOptionsFrame, labelVisible=False, borderVisible=False, height=1, visible=False)
+    inputOptionsLayout = cmds.paneLayout(parent=inputOptionsFrame, configuration='horizontal2')
 
     global sourcesLayoutUpdating 
     sourcesLayoutUpdating = False
@@ -701,7 +701,6 @@ def run():
     def setEditableUIEnabled(enabled):
         if enabled:
             cmds.button(convertButton, edit=True, label='Convert', command=convertMovie, parent=l) # this button becomes a "cancel" button when editing is disabled
-        cmds.button(addSourceButton, edit=True, enable=enabled)
         for sourceIndex in range(len(sources)):
             source = sources[sourceIndex]
             cmds.button(source['browseInputButton'], edit=True, enable=enabled)
@@ -709,6 +708,7 @@ def run():
             cmds.button(source['moveUpButton'], edit=True, enable=enabled)
             cmds.button(source['moveDownButton'], edit=True, enable=enabled)
             cmds.button(source['deleteButton'], edit=True, enable=enabled)
+            cmds.button(source['addSourceButton'], edit=True, enable=enabled)
         cmds.radioButtonGrp(osRadioGroup, edit=True, enable=enabled)
         cmds.button(browseFFMpegButton, edit=True, enable=enabled)
         cmds.button(browseOutputButton, edit=True, enable=enabled)
