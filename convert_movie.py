@@ -24,6 +24,7 @@ convert_movie.run()
 
 import maya.cmds as cmds
 import maya.utils
+import maya.mel
 import os.path
 import time
 import threading
@@ -38,7 +39,7 @@ from functools import partial
 
 FileFormat = namedtuple('FileFormat', ['name', 'extension', 'is_movie'])
 
-VERSION = '2.2'
+VERSION = '2.4'
 FILE_FORMATS = [FileFormat('PNG', 'png', False), FileFormat('JPEG', 'jpg', False), FileFormat('MP4', 'mp4', True), FileFormat('AVI', 'avi', True)]
 
 def popen(cmd, stdout, stderr):
@@ -161,8 +162,19 @@ def getAutoSaveConfigPath():
 def run():
     if cmds.window('ConvertMovie', exists=True):
         cmds.deleteUI('ConvertMovie', window=True)
-
-    w = cmds.window('ConvertMovie', width=380, height=400, title='Convert Movie v{}'.format(VERSION), menuBar=True)
+    
+    windowOptions = dict(
+        width=380, height=400,
+        title='Convert Movie v{}'.format(VERSION),
+        menuBar=True)
+    
+    if len(maya.mel.eval('$tempMelVar=$gMainWindow').strip()) == 0:
+        windowOptions['mainWindow'] = True
+        cmds.optionVar(intValue=('displayNewFeatureHighlights', False))
+        cmds.optionVar(intValue=('showHighlightNewFeaturesWindowOnStartup', False))
+        cmds.optionVar(intValue=('isFirstTimeRunningMaya', False))
+    
+    w = cmds.window('ConvertMovie', **windowOptions)
     l = cmds.formLayout(parent=w, numberOfDivisions=100)
 
     def saveSettings(jsonPath):
@@ -266,7 +278,7 @@ def run():
         cmds.showHelp('https://docs.google.com/document/d/1XVG1hAOgN7OIce_GG3SmsO9xnhpXGswg4ClSeiGN6ao/edit?usp=sharing', absolute=True)
 
     def openYouTubeTutorial(*args):
-        cmds.showHelp('https://www.youtube.com/watch?v=lt_uyIdjtWA', absolute=True)
+        cmds.showHelp('https://www.youtube.com/watch?v=UiY2gD1k_TA', absolute=True)
 
     def openAbout(*args):
         cmds.confirmDialog(
@@ -791,7 +803,7 @@ def run():
             filterGraph.append('[0:v] scale={}:{} [v]'.format(outputSize[0], outputSize[1]))
             videoIn = 'v'
             if hasAudioStream:
-                filterGraph.append('[0:a] null [a]')
+                filterGraph.append('[0:a] anull [a]')
                 audioIn = 'a'
         if fileExtension == 'mp4':
             filterGraph.append('[{}] format=yuv420p [{}]'.format(videoIn, videoIn + 'v'))
@@ -863,15 +875,21 @@ def run():
         for sourceIndex in range(len(sources)):
             source = sources[sourceIndex]
             inputMoviePath = cmds.textField(source['inputTextField'], q=True, text=True)
-            inputSources.append({'input': inputMoviePath, 'hasAudioStream': bool(source['hasAudioStream'])})
             if len(inputMoviePath) == 0 or len(glob.glob(inputPathToGlob(inputMoviePath))) == 0:
                 cmds.confirmDialog(
                     title='Error: Invalid input movie path', 
                     message='The given input movie path does not exist for Source {}.'.format(sourceIndex + 1),
                     button='OK')
                 return
+            inputSources.append({'input': inputMoviePath, 'hasAudioStream': bool(source['hasAudioStream'])})
         outputDir = cmds.textField(outputTextField, q=True, text=True)
         outputSize = parseOutputSize()
+        if outputSize is None:
+            cmds.confirmDialog(
+                    title='Error: Invalid movie size', 
+                    message='Invalid width or height given',
+                    button='OK')
+            return
         outputFileName = cmds.textField(outputFileNameTextField, q=True, text=True).strip()
         frameNumDigits = cmds.optionMenu(numDigitsMenu, q=True, select=True)
         fileFormat = cmds.optionMenu(fileFormatMenu, q=True, select=True)
